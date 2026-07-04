@@ -1,0 +1,248 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String   @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model RestaurantSetting {
+  id                    String   @id @default(cuid())
+  name                  String
+  publicPhone           String?
+  address               String?
+  deliveryBasePriceCop  Int      @default(0)
+  deliveryPricePerKmCop Int      @default(0)
+  deliveryMaxKm         Int      @default(30)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("restaurant_settings")
+}
+
+model ProductCategory {
+  id        String    @id @default(cuid())
+  name      String
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("product_categories")
+}
+
+model Product {
+  id          String          @id @default(cuid())
+  code        String          @unique
+  name        String
+  description String?
+  priceCop    Int
+  isActive    Boolean         @default(true)
+  isAvailable Boolean         @default(true)
+  categoryId  String?
+  category    ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  rules       ProductRule[]
+  orderItems  OrderItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductRule {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      String
+  config    Json
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@map("product_rules")
+}
+
+model Customer {
+  id        String         @id @default(cuid())
+  fullName  String
+  phone     String
+  address   String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  orders    Order[]
+  messages  ConversationMessage[]
+
+  @@unique([phone])
+  @@map("customers")
+}
+
+model Order {
+  id              String         @id @default(cuid())
+  orderNumber     String         @unique
+  invoiceNumber   String         @unique
+  externalBotId   String?
+  chatId          String?
+  status          OrderStatus    @default(CONFIRMED)
+  customerId      String
+  customer        Customer       @relation(fields: [customerId], references: [id])
+  customerName    String
+  customerPhone   String
+  customerAddress String
+  paymentMethod   String
+  observations    String?
+  subtotalCop     Int
+  deliveryFeeCop  Int
+  totalCop        Int
+  cancellationReason String?
+  confirmedAt     DateTime       @default(now())
+  preparingAt     DateTime?
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  items           OrderItem[]
+  messages        ConversationMessage[]
+  auditLogs       AuditLog[]
+
+  @@index([status, createdAt])
+  @@index([customerId])
+  @@index([chatId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String  @id @default(cuid())
+  orderId      String
+  order        Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productCode  String?
+  productName  String
+  quantity     Int
+  unitPriceCop Int
+  subtotalCop  Int
+  notes        String?
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model ConversationMessage {
+  id              String           @id @default(cuid())
+  orderId         String?
+  order           Order?           @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customerId      String?
+  customer        Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  chatId          String
+  direction       MessageDirection
+  sender          MessageSender
+  body            String
+  externalMessageId String?
+  sentAt          DateTime         @default(now())
+  createdAt       DateTime         @default(now())
+
+  @@index([chatId, sentAt])
+  @@index([orderId])
+  @@map("conversation_messages")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  actor     String
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum OrderStatus {
+  CONFIRMED
+  PREPARING
+  DELIVERED
+  CANCELLED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageSender {
+  CUSTOMER
+  BOT
+  ADMIN
+  SYSTEM
+}
