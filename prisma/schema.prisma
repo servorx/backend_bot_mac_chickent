@@ -147,7 +147,7 @@ model Order {
   id              String         @id @default(cuid())
   orderNumber     String         @unique
   invoiceNumber   String         @unique
-  externalBotId   String?
+  externalBotId   String?        @unique
   chatId          String?
   status          OrderStatus    @default(CONFIRMED)
   customerId      String

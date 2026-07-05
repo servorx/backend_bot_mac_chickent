@@ -37,80 +37,122 @@ export async function getOrderById(id: string) {
 }
 
 export async function createOrder(input: CreateOrderInput) {
+  if (input.externalBotId) {
+    const existing = await prisma.order.findFirst({
+      where: { externalBotId: input.externalBotId },
+      include: orderInclude,
+    });
+    if (existing) {
+      return existing;
+    }
+  }
+
   const subtotalCop = input.items.reduce(
     (total, item) => total + item.quantity * item.unitPriceCop,
     0,
   );
   const totalCop = subtotalCop + input.deliveryFeeCop;
 
-  const order = await prisma.$transaction(async (tx) => {
-    const customer = await tx.customer.upsert({
-      where: { phone: input.customer.phone },
-      update: {
-        fullName: input.customer.fullName,
-        address: input.customer.address,
-      },
-      create: {
-        fullName: input.customer.fullName,
-        phone: input.customer.phone,
-        address: input.customer.address,
-      },
-    });
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      const previousOrder = await tx.order.findFirst({
+        where: { chatId: input.chatId },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      });
 
-    const created = await tx.order.create({
-      data: {
-        orderNumber: await nextOrderNumber(tx),
-        invoiceNumber: await nextInvoiceNumber(tx),
-        externalBotId: input.externalBotId,
-        chatId: input.chatId,
-        customerId: customer.id,
-        customerName: customer.fullName,
-        customerPhone: customer.phone,
-        customerAddress: customer.address,
-        paymentMethod: input.paymentMethod,
-        observations: input.observations,
-        subtotalCop,
-        deliveryFeeCop: input.deliveryFeeCop,
-        totalCop,
-        items: {
-          create: input.items.map((item) => ({
-            productId: item.productId,
-            productCode: item.productCode,
-            productName: item.productName,
-            quantity: item.quantity,
-            unitPriceCop: item.unitPriceCop,
-            subtotalCop: item.quantity * item.unitPriceCop,
-            notes: item.notes,
-          })),
+      const customer = await tx.customer.upsert({
+        where: { phone: input.customer.phone },
+        update: {
+          fullName: input.customer.fullName,
+          address: input.customer.address,
         },
-      },
-      include: orderInclude,
-    });
+        create: {
+          fullName: input.customer.fullName,
+          phone: input.customer.phone,
+          address: input.customer.address,
+        },
+      });
 
-    if (input.inboundMessage) {
-      await tx.conversationMessage.create({
+      const created = await tx.order.create({
+        data: {
+          orderNumber: await nextOrderNumber(tx),
+          invoiceNumber: await nextInvoiceNumber(tx),
+          externalBotId: input.externalBotId,
+          chatId: input.chatId,
+          customerId: customer.id,
+          customerName: customer.fullName,
+          customerPhone: customer.phone,
+          customerAddress: customer.address,
+          paymentMethod: input.paymentMethod,
+          observations: input.observations,
+          subtotalCop,
+          deliveryFeeCop: input.deliveryFeeCop,
+          totalCop,
+          items: {
+            create: input.items.map((item) => ({
+              productId: item.productId,
+              productCode: item.productCode,
+              productName: item.productName,
+              quantity: item.quantity,
+              unitPriceCop: item.unitPriceCop,
+              subtotalCop: item.quantity * item.unitPriceCop,
+              notes: item.notes,
+            })),
+          },
+        },
+        include: orderInclude,
+      });
+
+      if (input.inboundMessage) {
+        await tx.conversationMessage.create({
+          data: {
+            orderId: created.id,
+            customerId: customer.id,
+            chatId: input.chatId,
+            direction: "INBOUND",
+            sender: "CUSTOMER",
+            body: input.inboundMessage,
+          },
+        });
+      }
+
+      await tx.conversationMessage.updateMany({
+        where: {
+          chatId: input.chatId,
+          orderId: null,
+          ...(previousOrder ? { sentAt: { gt: previousOrder.createdAt } } : {}),
+        },
         data: {
           orderId: created.id,
           customerId: customer.id,
-          chatId: input.chatId,
-          direction: "INBOUND",
-          sender: "CUSTOMER",
-          body: input.inboundMessage,
         },
       });
-    }
 
-    await tx.auditLog.create({
-      data: {
-        orderId: created.id,
-        actor: "bot",
-        action: "order.created",
-        metadata: { externalBotId: input.externalBotId ?? null },
-      },
+      await tx.auditLog.create({
+        data: {
+          orderId: created.id,
+          actor: "bot",
+          action: "order.created",
+          metadata: { externalBotId: input.externalBotId ?? null },
+        },
+      });
+
+      return created;
     });
-
-    return created;
-  });
+  } catch (error) {
+    if (input.externalBotId && isUniqueExternalBotIdError(error)) {
+      const existing = await prisma.order.findFirst({
+        where: { externalBotId: input.externalBotId },
+        include: orderInclude,
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+    throw error;
+  }
 
   publish({ type: "orders.changed", orderId: order.id });
   publish({ type: "conversations.changed", chatId: input.chatId, orderId: order.id });
@@ -119,6 +161,22 @@ export async function createOrder(input: CreateOrderInput) {
 
 export async function updateOrderStatus(id: string, input: UpdateStatusInput, actor = "admin") {
   const existing = await getOrderById(id);
+  if (existing.status === input.status) {
+    return existing;
+  }
+  const allowedNextStatuses: Record<string, string[]> = {
+    CONFIRMED: ["PREPARING", "CANCELLED"],
+    PREPARING: ["DELIVERED", "CANCELLED"],
+    DELIVERED: [],
+    CANCELLED: [],
+  };
+  if (!allowedNextStatuses[existing.status]?.includes(input.status)) {
+    throw new ApiError(
+      409,
+      "invalid_order_status_transition",
+      `Cannot move order from ${existing.status} to ${input.status}`,
+    );
+  }
 
   const order = await prisma.order.update({
     where: { id },
@@ -152,11 +210,33 @@ function kindToStatus(kind: string) {
 }
 
 async function nextOrderNumber(tx: Prisma.TransactionClient) {
-  const count = await tx.order.count();
-  return `PED-${String(count + 1).padStart(6, "0")}`;
+  const value = await nextCounterValue(tx, "order_number");
+  return `PED-${String(value).padStart(6, "0")}`;
 }
 
 async function nextInvoiceNumber(tx: Prisma.TransactionClient) {
-  const count = await tx.order.count();
-  return `FAC-${String(count + 1).padStart(6, "0")}`;
+  const value = await nextCounterValue(tx, "invoice_number");
+  return `FAC-${String(value).padStart(6, "0")}`;
+}
+
+async function nextCounterValue(tx: Prisma.TransactionClient, name: string) {
+  const rows = await tx.$queryRaw<Array<{ value: number }>>`
+    INSERT INTO "app_counters" ("name", "value")
+    VALUES (${name}, 1)
+    ON CONFLICT ("name")
+    DO UPDATE SET "value" = "app_counters"."value" + 1
+    RETURNING "value"
+  `;
+  return rows[0]?.value ?? 1;
+}
+
+function isUniqueExternalBotIdError(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) {
+    return false;
+  }
+  if ((error as { code?: string }).code !== "P2002") {
+    return false;
+  }
+  const target = (error as { meta?: { target?: unknown } }).meta?.target;
+  return Array.isArray(target) && target.includes("externalBotId");
 }

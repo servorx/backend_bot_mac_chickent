@@ -16,10 +16,10 @@ adminConversationRouter.get("/orders/:orderId/messages", async (req, res, next) 
   try {
     const order = await prisma.order.findUniqueOrThrow({
       where: { id: req.params.orderId },
-      select: { id: true, chatId: true },
+      select: { id: true },
     });
     const messages = await prisma.conversationMessage.findMany({
-      where: { OR: [{ orderId: order.id }, { chatId: order.chatId ?? "" }] },
+      where: { orderId: order.id },
       orderBy: { sentAt: "asc" },
     });
     res.json({ data: messages });
