@@ -214,6 +214,17 @@ model ConversationMessage {
   @@map("conversation_messages")
 }
 
+model ConversationControl {
+  id          String    @id @default(cuid())
+  chatId      String    @unique
+  aiEnabled   Boolean   @default(true)
+  pausedUntil DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("conversation_controls")
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   orderId   String?

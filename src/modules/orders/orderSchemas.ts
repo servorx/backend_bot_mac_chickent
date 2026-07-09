@@ -6,7 +6,7 @@ const orderItemSchema = z.object({
   productName: z.string().min(1),
   quantity: z.number().int().positive(),
   unitPriceCop: z.number().int().min(0),
-  notes: z.string().optional(),
+  notes: z.string().optional().nullable(),
 });
 
 export const createOrderSchema = z.object({
@@ -18,7 +18,7 @@ export const createOrderSchema = z.object({
     address: z.string().min(1),
   }),
   paymentMethod: z.string().min(1),
-  observations: z.string().optional(),
+  observations: z.string().optional().nullable(),
   deliveryFeeCop: z.number().int().min(0).default(0),
   items: z.array(orderItemSchema).min(1),
   inboundMessage: z.string().optional(),
