@@ -2,9 +2,11 @@ import { Router } from "express";
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma.js";
+import { ApiError } from "../../lib/errors.js";
 import { requireAdmin } from "../../middleware/auth.js";
 import { requireInternalApiKey } from "../../middleware/internalApiKey.js";
 import { publish } from "../../realtime/events.js";
+import { getBotStockControls, updateBotStockControl } from "../conversations/botClient.js";
 import { productRuleSchema, upsertCategorySchema, upsertProductSchema } from "./catalogSchemas.js";
 
 export const adminCatalogRouter = Router();
@@ -43,6 +45,29 @@ adminCatalogRouter.get("/products", async (_req, res, next) => {
     res.json({ data: products });
   } catch (error) {
     next(error);
+  }
+});
+
+adminCatalogRouter.get("/stock-controls", async (_req, res, next) => {
+  try {
+    const response = await getBotStockControls();
+    res.json(response);
+  } catch (error) {
+    next(new ApiError(502, "bot_stock_controls_unavailable", "No se pudo consultar la disponibilidad del bot."));
+  }
+});
+
+adminCatalogRouter.patch("/stock-controls/:code", async (req, res, next) => {
+  try {
+    const isAvailable = Boolean(req.body?.isAvailable);
+    const response = await updateBotStockControl({
+      code: req.params.code,
+      isAvailable,
+    });
+    publish({ type: "catalog.changed" });
+    res.json(response);
+  } catch (error) {
+    next(new ApiError(502, "bot_stock_control_update_failed", "No se pudo actualizar la disponibilidad del bot."));
   }
 });
 

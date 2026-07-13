@@ -17,7 +17,7 @@ export const internalOrderRouter = Router();
 
 adminOrderRouter.use(requireAdmin);
 
-adminOrderRouter.get("/orders/:kind(incoming|accepted|rejected|delivered|all)", async (req, res, next) => {
+adminOrderRouter.get("/orders/:kind(incoming|pickup|accepted|rejected|delivered|all)", async (req, res, next) => {
   try {
     const orders = await listOrders(req.params.kind);
     res.json({ data: orders.map(toAdminOrder) });

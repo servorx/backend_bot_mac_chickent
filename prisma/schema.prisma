@@ -150,6 +150,7 @@ model Order {
   externalBotId   String?        @unique
   chatId          String?
   status          OrderStatus    @default(CONFIRMED)
+  fulfillmentType FulfillmentType @default(DELIVERY)
   customerId      String
   customer        Customer       @relation(fields: [customerId], references: [id])
   customerName    String
@@ -172,6 +173,7 @@ model Order {
   auditLogs       AuditLog[]
 
   @@index([status, createdAt])
+  @@index([fulfillmentType, status, createdAt])
   @@index([customerId])
   @@index([chatId])
   @@map("orders")
@@ -244,6 +246,11 @@ enum OrderStatus {
   PREPARING
   DELIVERED
   CANCELLED
+}
+
+enum FulfillmentType {
+  DELIVERY
+  PICKUP
 }
 
 enum MessageDirection {

@@ -14,9 +14,9 @@ const orderInclude = {
 } satisfies Prisma.OrderInclude;
 
 export async function listOrders(kind: string) {
-  const status = kindToStatus(kind);
+  const where = kindToWhere(kind);
   return prisma.order.findMany({
-    where: status ? { status } : undefined,
+    where,
     include: orderInclude,
     orderBy: { createdAt: "desc" },
     take: 200,
@@ -94,6 +94,7 @@ export async function createOrder(input: CreateOrderInput) {
           invoiceNumber: await nextInvoiceNumber(tx),
           externalBotId: input.externalBotId,
           chatId: input.chatId,
+          fulfillmentType: input.fulfillmentType,
           customerId: customer.id,
           customerName: customer.fullName,
           customerPhone: customer.phone,
@@ -223,11 +224,12 @@ export async function updateOrderStatusByExternalBotId(
   return updateOrderStatus(order.id, input, actor);
 }
 
-function kindToStatus(kind: string) {
-  if (kind === "incoming") return "CONFIRMED";
-  if (kind === "accepted") return "PREPARING";
-  if (kind === "rejected") return "CANCELLED";
-  if (kind === "delivered") return "DELIVERED";
+function kindToWhere(kind: string): Prisma.OrderWhereInput | undefined {
+  if (kind === "incoming") return { status: "CONFIRMED", fulfillmentType: "DELIVERY" };
+  if (kind === "pickup") return { status: "CONFIRMED", fulfillmentType: "PICKUP" };
+  if (kind === "accepted") return { status: "PREPARING" };
+  if (kind === "rejected") return { status: "CANCELLED" };
+  if (kind === "delivered") return { status: "DELIVERED" };
   return undefined;
 }
 

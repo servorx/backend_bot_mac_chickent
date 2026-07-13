@@ -10,6 +10,7 @@ export function toAdminOrder(order: OrderWithItems) {
     orderNumber: order.orderNumber,
     invoiceNumber: order.invoiceNumber,
     status: order.status,
+    fulfillmentType: order.fulfillmentType,
     customer: {
       fullName: order.customerName,
       phone: order.customerPhone,

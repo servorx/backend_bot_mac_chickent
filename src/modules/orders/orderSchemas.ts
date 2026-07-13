@@ -12,6 +12,7 @@ const orderItemSchema = z.object({
 export const createOrderSchema = z.object({
   externalBotId: z.string().optional(),
   chatId: z.string().min(1),
+  fulfillmentType: z.enum(["DELIVERY", "PICKUP"]).default("DELIVERY"),
   customer: z.object({
     fullName: z.string().min(1),
     phone: z.string().min(1),
