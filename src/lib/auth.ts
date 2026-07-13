@@ -7,6 +7,16 @@ import { prisma } from "./prisma.js";
 export const auth = betterAuth({
   baseURL: env.APP_BASE_URL,
   trustedOrigins: [env.FRONTEND_ORIGIN],
+  advanced: {
+    useSecureCookies: env.NODE_ENV === "production",
+    defaultCookieAttributes:
+      env.NODE_ENV === "production"
+        ? {
+            sameSite: "none",
+            secure: true,
+          }
+        : undefined,
+  },
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
