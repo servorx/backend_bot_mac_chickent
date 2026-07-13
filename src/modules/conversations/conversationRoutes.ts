@@ -61,10 +61,35 @@ adminConversationRouter.get("/orders/:orderId/messages", async (req, res, next) 
   try {
     const order = await prisma.order.findUniqueOrThrow({
       where: { id: req.params.orderId },
-      select: { id: true },
+      select: { id: true, chatId: true, createdAt: true },
     });
+    const nextOrder = order.chatId
+      ? await prisma.order.findFirst({
+          where: {
+            chatId: order.chatId,
+            createdAt: { gt: order.createdAt },
+          },
+          orderBy: { createdAt: "asc" },
+          select: { createdAt: true },
+        })
+      : null;
     const messages = await prisma.conversationMessage.findMany({
-      where: { orderId: order.id },
+      where: {
+        OR: [
+          { orderId: order.id },
+          ...(order.chatId
+            ? [
+                {
+                  orderId: null,
+                  chatId: order.chatId,
+                  sentAt: nextOrder
+                    ? { gte: order.createdAt, lt: nextOrder.createdAt }
+                    : { gte: order.createdAt },
+                },
+              ]
+            : []),
+        ],
+      },
       orderBy: { sentAt: "asc" },
     });
     res.json({ data: messages });
