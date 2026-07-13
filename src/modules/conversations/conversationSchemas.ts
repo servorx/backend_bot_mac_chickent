@@ -15,6 +15,7 @@ export const incomingMessageSchema = z.object({
   phone: z.string().optional(),
   body: z.string().trim().min(1),
   externalMessageId: z.string().optional(),
+  sentAt: z.string().optional(),
   orderId: z.string().optional(),
 });
 
@@ -22,5 +23,6 @@ export const outgoingBotMessageSchema = z.object({
   chatId: z.string().min(1),
   body: z.string().trim().min(1),
   externalMessageId: z.string().optional(),
+  sentAt: z.string().optional(),
   orderId: z.string().optional(),
 });

@@ -208,6 +208,10 @@ internalConversationRouter.get("/conversations/:chatId/control", async (req, res
 internalConversationRouter.post("/messages/incoming", async (req, res, next) => {
   try {
     const input = incomingMessageSchema.parse(req.body);
+    const existing = await findMessageByExternalId(input.externalMessageId);
+    if (existing) {
+      return res.status(200).json({ data: existing });
+    }
     const customer = input.phone
       ? await prisma.customer.findUnique({ where: { phone: input.phone } })
       : null;
@@ -220,6 +224,7 @@ internalConversationRouter.post("/messages/incoming", async (req, res, next) => 
         sender: "CUSTOMER",
         body: input.body,
         externalMessageId: input.externalMessageId,
+        sentAt: parseSyncedSentAt(input.sentAt),
       },
     });
     publish({ type: "conversations.changed", chatId: input.chatId, orderId: input.orderId });
@@ -232,6 +237,10 @@ internalConversationRouter.post("/messages/incoming", async (req, res, next) => 
 internalConversationRouter.post("/messages/outgoing-bot", async (req, res, next) => {
   try {
     const input = outgoingBotMessageSchema.parse(req.body);
+    const existing = await findMessageByExternalId(input.externalMessageId);
+    if (existing) {
+      return res.status(200).json({ data: existing });
+    }
     const customer = await prisma.customer.findUnique({ where: { phone: input.chatId } });
     const message = await prisma.conversationMessage.create({
       data: {
@@ -242,6 +251,7 @@ internalConversationRouter.post("/messages/outgoing-bot", async (req, res, next)
         sender: "BOT",
         body: input.body,
         externalMessageId: input.externalMessageId,
+        sentAt: parseSyncedSentAt(input.sentAt),
       },
     });
     publish({ type: "conversations.changed", chatId: input.chatId, orderId: input.orderId });
@@ -276,4 +286,19 @@ function toControlResponse(control: { aiEnabled: boolean; pausedUntil: Date | nu
     pausedUntil,
     aiActive: control.aiEnabled && (!control.pausedUntil || control.pausedUntil.getTime() <= now),
   };
+}
+
+async function findMessageByExternalId(externalMessageId?: string) {
+  if (!externalMessageId) {
+    return null;
+  }
+  return prisma.conversationMessage.findFirst({ where: { externalMessageId } });
+}
+
+function parseSyncedSentAt(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }

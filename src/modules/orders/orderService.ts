@@ -36,6 +36,19 @@ export async function getOrderById(id: string) {
   return order;
 }
 
+export async function getOrderByExternalBotId(externalBotId: string) {
+  const order = await prisma.order.findUnique({
+    where: { externalBotId },
+    include: orderInclude,
+  });
+
+  if (!order) {
+    throw new ApiError(404, "order_not_found", "Order not found");
+  }
+
+  return order;
+}
+
 export async function createOrder(input: CreateOrderInput) {
   if (input.externalBotId) {
     const existing = await prisma.order.findFirst({
@@ -201,6 +214,15 @@ export async function updateOrderStatus(id: string, input: UpdateStatusInput, ac
   return order;
 }
 
+export async function updateOrderStatusByExternalBotId(
+  externalBotId: string,
+  input: UpdateStatusInput,
+  actor = "bot",
+) {
+  const order = await getOrderByExternalBotId(externalBotId);
+  return updateOrderStatus(order.id, input, actor);
+}
+
 function kindToStatus(kind: string) {
   if (kind === "incoming") return "CONFIRMED";
   if (kind === "accepted") return "PREPARING";
@@ -210,24 +232,37 @@ function kindToStatus(kind: string) {
 }
 
 async function nextOrderNumber(tx: Prisma.TransactionClient) {
-  const value = await nextCounterValue(tx, "order_number");
+  const value = await nextSequentialValue(tx, "orderNumber", "PED-");
   return `PED-${String(value).padStart(6, "0")}`;
 }
 
 async function nextInvoiceNumber(tx: Prisma.TransactionClient) {
-  const value = await nextCounterValue(tx, "invoice_number");
+  const value = await nextSequentialValue(tx, "invoiceNumber", "FAC-");
   return `FAC-${String(value).padStart(6, "0")}`;
 }
 
-async function nextCounterValue(tx: Prisma.TransactionClient, name: string) {
-  const rows = await tx.$queryRaw<Array<{ value: number }>>`
-    INSERT INTO "app_counters" ("name", "value")
-    VALUES (${name}, 1)
-    ON CONFLICT ("name")
-    DO UPDATE SET "value" = "app_counters"."value" + 1
-    RETURNING "value"
-  `;
-  return rows[0]?.value ?? 1;
+async function nextSequentialValue(
+  tx: Prisma.TransactionClient,
+  field: "orderNumber" | "invoiceNumber",
+  prefix: string,
+) {
+  const latest = await tx.order.findFirst({
+    where: {
+      [field]: {
+        startsWith: prefix,
+      },
+    },
+    orderBy: {
+      [field]: "desc",
+    },
+    select: {
+      [field]: true,
+    },
+  });
+  const currentValue = latest?.[field];
+  if (!currentValue) return 1;
+  const suffix = Number(currentValue.slice(prefix.length));
+  return Number.isFinite(suffix) ? suffix + 1 : 1;
 }
 
 function isUniqueExternalBotIdError(error: unknown) {

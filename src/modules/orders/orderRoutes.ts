@@ -2,7 +2,13 @@ import { Router } from "express";
 
 import { requireAdmin } from "../../middleware/auth.js";
 import { requireInternalApiKey } from "../../middleware/internalApiKey.js";
-import { createOrder, getOrderById, listOrders, updateOrderStatus } from "./orderService.js";
+import {
+  createOrder,
+  getOrderById,
+  listOrders,
+  updateOrderStatus,
+  updateOrderStatusByExternalBotId,
+} from "./orderService.js";
 import { cancelOrderSchema, createOrderSchema, updateStatusSchema } from "./orderSchemas.js";
 import { toAdminOrder } from "./orderMapper.js";
 
@@ -68,6 +74,16 @@ internalOrderRouter.post("/orders", async (req, res, next) => {
     const input = createOrderSchema.parse(req.body);
     const order = await createOrder(input);
     res.status(201).json({ data: toAdminOrder(order) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+internalOrderRouter.patch("/orders/external/:externalBotId/status", async (req, res, next) => {
+  try {
+    const input = updateStatusSchema.parse(req.body);
+    const order = await updateOrderStatusByExternalBotId(req.params.externalBotId, input);
+    res.json({ data: toAdminOrder(order) });
   } catch (error) {
     next(error);
   }
