@@ -10,6 +10,14 @@ export const updateConversationControlSchema = z.object({
   aiEnabled: z.boolean(),
 });
 
+const messageAttachmentSchema = z.object({
+  type: z.string().min(1),
+  mediaId: z.string().min(1),
+  mimeType: z.string().nullish(),
+  sha256: z.string().nullish(),
+  url: z.string().min(1),
+});
+
 export const incomingMessageSchema = z.object({
   chatId: z.string().min(1),
   phone: z.string().optional(),
@@ -17,6 +25,7 @@ export const incomingMessageSchema = z.object({
   externalMessageId: z.string().optional(),
   sentAt: z.string().optional(),
   orderId: z.string().optional(),
+  attachment: messageAttachmentSchema.optional(),
 });
 
 export const outgoingBotMessageSchema = z.object({

@@ -13,6 +13,7 @@ import { allowOnlyFirstSignup } from "./middleware/firstAdminSignup.js";
 import { adminCatalogRouter, internalCatalogRouter } from "./modules/catalog/catalogRoutes.js";
 import { adminConversationRouter, internalConversationRouter } from "./modules/conversations/conversationRoutes.js";
 import { deliveryRouter } from "./modules/delivery/deliveryRoutes.js";
+import { mediaRouter } from "./modules/media/mediaRoutes.js";
 import { adminOrderRouter, internalOrderRouter } from "./modules/orders/orderRoutes.js";
 import { attachRealtime } from "./realtime/events.js";
 
@@ -41,6 +42,7 @@ app.use("/api/admin", adminOrderRouter);
 app.use("/api/admin/catalog", adminCatalogRouter);
 app.use("/api/admin/conversations", adminConversationRouter);
 app.use("/api/admin/delivery", deliveryRouter);
+app.use("/api/media", mediaRouter);
 app.use("/api/v1/internal", internalOrderRouter);
 app.use("/api/v1/internal", internalCatalogRouter);
 app.use("/api/v1/internal", internalConversationRouter);

@@ -223,6 +223,7 @@ internalConversationRouter.post("/messages/incoming", async (req, res, next) => 
         direction: "INBOUND",
         sender: "CUSTOMER",
         body: input.body,
+        attachment: input.attachment,
         externalMessageId: input.externalMessageId,
         sentAt: parseSyncedSentAt(input.sentAt),
       },

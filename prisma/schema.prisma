@@ -207,6 +207,7 @@ model ConversationMessage {
   direction       MessageDirection
   sender          MessageSender
   body            String
+  attachment      Json?
   externalMessageId String?
   sentAt          DateTime         @default(now())
   createdAt       DateTime         @default(now())
