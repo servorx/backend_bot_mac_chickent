@@ -2,7 +2,7 @@ import type { Server as HttpServer } from "http";
 import type { IncomingMessage } from "http";
 import { WebSocketServer } from "ws";
 
-import { env } from "../config/env.js";
+import { isAllowedFrontendOrigin } from "../config/origins.js";
 import { auth } from "../lib/auth.js";
 
 type RealtimeEvent =
@@ -46,7 +46,7 @@ function isRealtimeRequest(request: IncomingMessage) {
 }
 
 async function isAuthorizedRealtimeRequest(request: IncomingMessage) {
-  if (request.headers.origin !== env.FRONTEND_ORIGIN) {
+  if (!isAllowedFrontendOrigin(request.headers.origin)) {
     return false;
   }
   const session = await auth.api.getSession({ headers: headersFromRequest(request) });

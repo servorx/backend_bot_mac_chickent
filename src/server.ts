@@ -6,6 +6,7 @@ import morgan from "morgan";
 import { toNodeHandler } from "better-auth/node";
 
 import { env } from "./config/env.js";
+import { isAllowedFrontendOrigin } from "./config/origins.js";
 import { auth } from "./lib/auth.js";
 import { errorHandler } from "./lib/errors.js";
 import { prisma } from "./lib/prisma.js";
@@ -21,7 +22,13 @@ const app = express();
 
 app.use(
   cors({
-    origin: env.FRONTEND_ORIGIN,
+    origin(origin, callback) {
+      if (!origin || isAllowedFrontendOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin not allowed by CORS"));
+    },
     credentials: true,
   }),
 );
