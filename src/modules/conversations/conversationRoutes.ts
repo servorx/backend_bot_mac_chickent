@@ -125,13 +125,25 @@ adminConversationRouter.put("/:chatId/control", async (req, res, next) => {
   try {
     const chatId = chatIdSchema.parse(req.params.chatId);
     const input = updateConversationControlSchema.parse(req.body);
+    const hasPauseUpdate = input.pauseMinutes !== undefined;
+    const pauseMinutes = input.pauseMinutes ?? 0;
+    const pausedUntil =
+      !hasPauseUpdate
+        ? undefined
+        : pauseMinutes > 0
+          ? new Date(Date.now() + pauseMinutes * 60 * 1000)
+          : null;
     const control = await prisma.conversationControl.upsert({
       where: { chatId },
       update: {
         aiEnabled: input.aiEnabled,
-        pausedUntil: input.aiEnabled ? null : undefined,
+        pausedUntil: hasPauseUpdate ? pausedUntil : input.aiEnabled ? null : undefined,
       },
-      create: { chatId, aiEnabled: input.aiEnabled },
+      create: {
+        chatId,
+        aiEnabled: input.aiEnabled ?? true,
+        pausedUntil: hasPauseUpdate ? pausedUntil : null,
+      },
     });
     publish({ type: "conversations.changed", chatId });
     res.json({ data: toControlResponse(control) });

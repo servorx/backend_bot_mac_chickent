@@ -7,7 +7,8 @@ export const sendMessageSchema = z.object({
 export const chatIdSchema = z.string().trim().min(7).max(20).regex(/^\d+$/);
 
 export const updateConversationControlSchema = z.object({
-  aiEnabled: z.boolean(),
+  aiEnabled: z.boolean().optional(),
+  pauseMinutes: z.number().int().min(0).max(240).optional(),
 });
 
 const messageAttachmentSchema = z.object({
