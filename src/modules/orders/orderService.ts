@@ -168,6 +168,12 @@ export async function createOrder(input: CreateOrderInput) {
     throw error;
   }
 
+  publish({
+    type: "orders.created",
+    orderId: order.id,
+    status: order.status,
+    fulfillmentType: order.fulfillmentType,
+  });
   publish({ type: "orders.changed", orderId: order.id });
   publish({ type: "conversations.changed", chatId: input.chatId, orderId: order.id });
   return order;

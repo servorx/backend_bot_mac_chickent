@@ -7,6 +7,7 @@ import { auth } from "../lib/auth.js";
 
 type RealtimeEvent =
   | { type: "orders.changed"; orderId?: string }
+  | { type: "orders.created"; orderId: string; status: string; fulfillmentType: string }
   | { type: "catalog.changed" }
   | { type: "conversations.changed"; chatId?: string; orderId?: string };
 

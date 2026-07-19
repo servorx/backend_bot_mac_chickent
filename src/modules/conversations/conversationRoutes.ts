@@ -247,6 +247,11 @@ internalConversationRouter.post("/messages/incoming", async (req, res, next) => 
     const input = incomingMessageSchema.parse(req.body);
     const existing = await findMessageByExternalId(input.externalMessageId);
     if (existing) {
+      publish({
+        type: "conversations.changed",
+        chatId: input.chatId,
+        orderId: input.orderId ?? existing.orderId ?? undefined,
+      });
       return res.status(200).json({ data: existing });
     }
     const customer = input.phone
@@ -277,6 +282,11 @@ internalConversationRouter.post("/messages/outgoing-bot", async (req, res, next)
     const input = outgoingBotMessageSchema.parse(req.body);
     const existing = await findMessageByExternalId(input.externalMessageId);
     if (existing) {
+      publish({
+        type: "conversations.changed",
+        chatId: input.chatId,
+        orderId: input.orderId ?? existing.orderId ?? undefined,
+      });
       return res.status(200).json({ data: existing });
     }
     const customer = await prisma.customer.findUnique({ where: { phone: input.chatId } });
