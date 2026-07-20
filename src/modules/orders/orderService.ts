@@ -231,7 +231,7 @@ export async function updateOrderStatusByExternalBotId(
 }
 
 function kindToWhere(kind: string): Prisma.OrderWhereInput | undefined {
-  if (kind === "incoming") return { status: "CONFIRMED", fulfillmentType: "DELIVERY" };
+  if (kind === "incoming") return { status: "CONFIRMED" };
   if (kind === "pickup") return { status: "CONFIRMED", fulfillmentType: "PICKUP" };
   if (kind === "accepted") return { status: "PREPARING" };
   if (kind === "rejected") return { status: "CANCELLED" };
