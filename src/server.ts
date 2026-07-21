@@ -13,7 +13,7 @@ import { prisma } from "./lib/prisma.js";
 import { allowOnlyFirstSignup } from "./middleware/firstAdminSignup.js";
 import { adminCatalogRouter, internalCatalogRouter } from "./modules/catalog/catalogRoutes.js";
 import { adminConversationRouter, internalConversationRouter } from "./modules/conversations/conversationRoutes.js";
-import { deliveryRouter } from "./modules/delivery/deliveryRoutes.js";
+import { deliveryRouter, internalDeliveryRouter } from "./modules/delivery/deliveryRoutes.js";
 import { mediaRouter } from "./modules/media/mediaRoutes.js";
 import { adminOrderRouter, internalOrderRouter } from "./modules/orders/orderRoutes.js";
 import { attachRealtime } from "./realtime/events.js";
@@ -53,6 +53,7 @@ app.use("/api/media", mediaRouter);
 app.use("/api/v1/internal", internalOrderRouter);
 app.use("/api/v1/internal", internalCatalogRouter);
 app.use("/api/v1/internal", internalConversationRouter);
+app.use("/api/v1/internal", internalDeliveryRouter);
 
 app.use(errorHandler);
 

@@ -75,6 +75,7 @@ model RestaurantSetting {
   name                  String
   publicPhone           String?
   address               String?
+  deliveryOrdersEnabled Boolean  @default(true)
   deliveryBasePriceCop  Int      @default(0)
   deliveryPricePerKmCop Int      @default(0)
   deliveryMaxKm         Int      @default(30)

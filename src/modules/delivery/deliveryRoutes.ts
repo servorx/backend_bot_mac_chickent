@@ -3,17 +3,24 @@ import { z } from "zod";
 
 import { prisma } from "../../lib/prisma.js";
 import { requireAdmin } from "../../middleware/auth.js";
+import { requireInternalApiKey } from "../../middleware/internalApiKey.js";
 
 const settingsSchema = z.object({
   name: z.string().min(1),
   publicPhone: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
+  deliveryOrdersEnabled: z.boolean().optional(),
   deliveryBasePriceCop: z.number().int().min(0).default(0),
   deliveryPricePerKmCop: z.number().int().min(0).default(0),
   deliveryMaxKm: z.number().int().min(1).max(100).default(30),
 });
 
+const availabilitySchema = z.object({
+  deliveryOrdersEnabled: z.boolean(),
+});
+
 export const deliveryRouter = Router();
+export const internalDeliveryRouter = Router();
 
 deliveryRouter.use(requireAdmin);
 
@@ -32,9 +39,60 @@ deliveryRouter.put("/settings", async (req, res, next) => {
     const current = await getOrCreateSettings();
     const settings = await prisma.restaurantSetting.update({
       where: { id: current.id },
-      data: input,
+      data: {
+        ...input,
+        deliveryOrdersEnabled: input.deliveryOrdersEnabled ?? current.deliveryOrdersEnabled,
+      },
     });
     res.json({ data: settings });
+  } catch (error) {
+    next(error);
+  }
+});
+
+deliveryRouter.get("/availability", async (_req, res, next) => {
+  try {
+    const settings = await getOrCreateSettings();
+    res.json({
+      data: {
+        deliveryOrdersEnabled: settings.deliveryOrdersEnabled,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+deliveryRouter.patch("/availability", async (req, res, next) => {
+  try {
+    const input = availabilitySchema.parse(req.body);
+    const current = await getOrCreateSettings();
+    const settings = await prisma.restaurantSetting.update({
+      where: { id: current.id },
+      data: {
+        deliveryOrdersEnabled: input.deliveryOrdersEnabled,
+      },
+    });
+    res.json({
+      data: {
+        deliveryOrdersEnabled: settings.deliveryOrdersEnabled,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+internalDeliveryRouter.use(requireInternalApiKey);
+
+internalDeliveryRouter.get("/operations/delivery-availability", async (_req, res, next) => {
+  try {
+    const settings = await getOrCreateSettings();
+    res.json({
+      data: {
+        deliveryOrdersEnabled: settings.deliveryOrdersEnabled,
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -49,6 +107,7 @@ async function getOrCreateSettings() {
   return prisma.restaurantSetting.create({
     data: {
       name: "ASADERO MC CHICKEN EXPRESS",
+      deliveryOrdersEnabled: true,
       deliveryBasePriceCop: 0,
       deliveryPricePerKmCop: 0,
       deliveryMaxKm: 30,
