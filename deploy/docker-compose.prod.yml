@@ -1,0 +1,66 @@
+name: asadero_mac
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+  chroma:
+    image: chromadb/chroma:0.5.23
+    restart: unless-stopped
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /chroma/chroma
+
+  backend:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  bot:
+    build:
+      context: ../../bot
+    restart: unless-stopped
+    env_file:
+      - ../../bot/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      chroma:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8000:8000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
