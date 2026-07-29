@@ -99,6 +99,8 @@ internalDeliveryRouter.get("/operations/delivery-availability", async (_req, res
 });
 
 async function getOrCreateSettings() {
+  await ensureDeliveryAvailabilityColumn();
+
   const existing = await prisma.restaurantSetting.findFirst();
   if (existing) {
     return existing;
@@ -113,4 +115,11 @@ async function getOrCreateSettings() {
       deliveryMaxKm: 30,
     },
   });
+}
+
+async function ensureDeliveryAvailabilityColumn() {
+  await prisma.$executeRaw`
+    ALTER TABLE "restaurant_settings"
+    ADD COLUMN IF NOT EXISTS "deliveryOrdersEnabled" BOOLEAN NOT NULL DEFAULT true
+  `;
 }
