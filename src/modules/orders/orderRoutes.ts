@@ -6,10 +6,11 @@ import {
   createOrder,
   getOrderById,
   listOrders,
+  updateOrderDelivery,
   updateOrderStatus,
   updateOrderStatusByExternalBotId,
 } from "./orderService.js";
-import { cancelOrderSchema, createOrderSchema, updateStatusSchema } from "./orderSchemas.js";
+import { cancelOrderSchema, createOrderSchema, updateDeliverySchema, updateStatusSchema } from "./orderSchemas.js";
 import { toAdminOrder } from "./orderMapper.js";
 
 export const adminOrderRouter = Router();
@@ -62,6 +63,22 @@ adminOrderRouter.patch("/orders/:id/status", async (req, res, next) => {
     const input = updateStatusSchema.parse(req.body);
     const order = await updateOrderStatus(req.params.id, input);
     res.json({ data: toAdminOrder(order) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminOrderRouter.patch("/orders/:id/delivery", async (req, res, next) => {
+  try {
+    const input = updateDeliverySchema.parse(req.body);
+    const result = await updateOrderDelivery(req.params.id, input);
+    res.json({
+      data: toAdminOrder(result.order),
+      meta: {
+        messageDelivered: result.messageDelivered,
+        deliveryZoneSaved: result.deliveryZoneSaved,
+      },
+    });
   } catch (error) {
     next(error);
   }

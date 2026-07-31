@@ -33,3 +33,9 @@ export const updateStatusSchema = z.object({
   status: z.enum(["CONFIRMED", "PREPARING", "DELIVERED", "CANCELLED"]),
   reason: z.string().optional().nullable(),
 });
+
+export const updateDeliverySchema = z.object({
+  customerAddress: z.string().min(1),
+  deliveryFeeCop: z.number().int().min(0),
+  deliveryZone: z.string().min(1).optional(),
+});

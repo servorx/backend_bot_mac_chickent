@@ -3,11 +3,13 @@ import type { Prisma } from "@prisma/client";
 import { ApiError } from "../../lib/errors.js";
 import { prisma } from "../../lib/prisma.js";
 import { publish } from "../../realtime/events.js";
-import type { createOrderSchema, updateStatusSchema } from "./orderSchemas.js";
+import { sendBotMessage, upsertBotDeliveryZonePrice } from "../conversations/botClient.js";
+import type { createOrderSchema, updateDeliverySchema, updateStatusSchema } from "./orderSchemas.js";
 import type { z } from "zod";
 
 type CreateOrderInput = z.infer<typeof createOrderSchema>;
 type UpdateStatusInput = z.infer<typeof updateStatusSchema>;
+type UpdateDeliveryInput = z.infer<typeof updateDeliverySchema>;
 
 const orderInclude = {
   items: true,
@@ -230,6 +232,105 @@ export async function updateOrderStatusByExternalBotId(
   return updateOrderStatus(order.id, input, actor);
 }
 
+export async function updateOrderDelivery(id: string, input: UpdateDeliveryInput) {
+  const existing = await getOrderById(id);
+  if (existing.fulfillmentType !== "DELIVERY") {
+    throw new ApiError(409, "pickup_order_has_no_delivery", "Pickup orders do not have delivery");
+  }
+
+  const totalCop = existing.subtotalCop + input.deliveryFeeCop;
+  const messageBody = buildDeliveryCorrectionMessage({
+    orderNumber: existing.orderNumber,
+    customerAddress: input.customerAddress,
+    items: existing.items,
+    subtotalCop: existing.subtotalCop,
+    deliveryFeeCop: input.deliveryFeeCop,
+    totalCop,
+  });
+  const order = await prisma.$transaction(async (tx) => {
+    await tx.customer.update({
+      where: { id: existing.customerId },
+      data: { address: input.customerAddress },
+    });
+
+    const updated = await tx.order.update({
+      where: { id },
+      data: {
+        customerAddress: input.customerAddress,
+        deliveryFeeCop: input.deliveryFeeCop,
+        totalCop,
+        auditLogs: {
+          create: {
+            actor: "admin",
+            action: "order.delivery_updated",
+            metadata: {
+              previousAddress: existing.customerAddress,
+              nextAddress: input.customerAddress,
+              previousDeliveryFeeCop: existing.deliveryFeeCop,
+              nextDeliveryFeeCop: input.deliveryFeeCop,
+              previousTotalCop: existing.totalCop,
+              nextTotalCop: totalCop,
+              deliveryZone: input.deliveryZone ?? null,
+            },
+          },
+        },
+      },
+      include: orderInclude,
+    });
+
+    if (existing.chatId) {
+      await tx.conversationMessage.create({
+        data: {
+          orderId: existing.id,
+          customerId: existing.customerId,
+          chatId: existing.chatId,
+          direction: "OUTBOUND",
+          sender: "ADMIN",
+          body: messageBody,
+        },
+      });
+    }
+
+    return updated;
+  });
+
+  let messageDelivered = false;
+  if (existing.chatId) {
+    try {
+      await sendBotMessage({ chatId: existing.chatId, body: messageBody });
+      const pausedUntil = new Date(Date.now() + 30 * 60 * 1000);
+      await prisma.conversationControl.upsert({
+        where: { chatId: existing.chatId },
+        update: { pausedUntil },
+        create: { chatId: existing.chatId, pausedUntil },
+      });
+      messageDelivered = true;
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  let deliveryZoneSaved = false;
+  const deliveryZone = (input.deliveryZone || inferDeliveryZone(input.customerAddress)).trim();
+  if (deliveryZone) {
+    try {
+      await upsertBotDeliveryZonePrice({
+        neighborhood: deliveryZone,
+        deliveryPriceCop: input.deliveryFeeCop,
+      });
+      deliveryZoneSaved = true;
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  publish({ type: "orders.changed", orderId: order.id });
+  if (existing.chatId) {
+    publish({ type: "conversations.changed", chatId: existing.chatId, orderId: order.id });
+  }
+  return { order, messageDelivered, deliveryZoneSaved };
+}
+
 function kindToWhere(kind: string): Prisma.OrderWhereInput | undefined {
   if (kind === "incoming") return { status: "CONFIRMED" };
   if (kind === "pickup") return { status: "CONFIRMED", fulfillmentType: "PICKUP" };
@@ -282,4 +383,47 @@ function isUniqueExternalBotIdError(error: unknown) {
   }
   const target = (error as { meta?: { target?: unknown } }).meta?.target;
   return Array.isArray(target) && target.includes("externalBotId");
+}
+
+function buildDeliveryCorrectionMessage(input: {
+  orderNumber: string;
+  customerAddress: string;
+  items: { productName: string; quantity: number; subtotalCop: number }[];
+  subtotalCop: number;
+  deliveryFeeCop: number;
+  totalCop: number;
+}) {
+  const itemLines = input.items
+    .map((item) => `- ${item.quantity} x ${item.productName}: ${formatCOP(item.subtotalCop)}`)
+    .join("\n");
+
+  return [
+    "Te pedimos disculpas, el valor del domicilio de tu orden estaba mal.",
+    "",
+    `El valor real del domicilio es ${formatCOP(input.deliveryFeeCop)}. Este es el detalle actualizado de tu compra:`,
+    "",
+    `🧾 Orden ${input.orderNumber}`,
+    "",
+    itemLines,
+    "",
+    `📍 Direccion: ${input.customerAddress}`,
+    "",
+    `Subtotal: ${formatCOP(input.subtotalCop)}`,
+    `Domicilio: ${formatCOP(input.deliveryFeeCop)}`,
+    `Total: ${formatCOP(input.totalCop)}`,
+    "",
+    "Gracias por tu comprension.",
+  ].join("\n");
+}
+
+function formatCOP(value: number) {
+  return `$${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(value)}`;
+}
+
+function inferDeliveryZone(address: string) {
+  const parts = address
+    .split(/\s+-\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : "";
 }
