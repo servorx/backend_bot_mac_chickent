@@ -10,6 +10,18 @@ import type { z } from "zod";
 type CreateOrderInput = z.infer<typeof createOrderSchema>;
 type UpdateStatusInput = z.infer<typeof updateStatusSchema>;
 type UpdateDeliveryInput = z.infer<typeof updateDeliverySchema>;
+export type DailyProductReport = {
+  date: string;
+  generatedAt: string;
+  items: {
+    productCode: string | null;
+    productName: string;
+    quantity: number;
+    totalCop: number;
+  }[];
+  totalQuantity: number;
+  totalCop: number;
+};
 
 const orderInclude = {
   items: true,
@@ -331,6 +343,50 @@ export async function updateOrderDelivery(id: string, input: UpdateDeliveryInput
   return { order, messageDelivered, deliveryZoneSaved };
 }
 
+export async function getDailyProductReport(date = todayInColombia()): Promise<DailyProductReport> {
+  const { start, end } = bogotaDayBounds(date);
+  const rows = await prisma.orderItem.groupBy({
+    by: ["productCode", "productName"],
+    where: {
+      order: {
+        createdAt: {
+          gte: start,
+          lt: end,
+        },
+        status: {
+          not: "CANCELLED",
+        },
+      },
+    },
+    _sum: {
+      quantity: true,
+      subtotalCop: true,
+    },
+    orderBy: [
+      {
+        productName: "asc",
+      },
+    ],
+  });
+
+  const items = rows
+    .map((row) => ({
+      productCode: row.productCode,
+      productName: row.productName,
+      quantity: row._sum.quantity ?? 0,
+      totalCop: row._sum.subtotalCop ?? 0,
+    }))
+    .filter((item) => item.quantity > 0);
+
+  return {
+    date,
+    generatedAt: new Date().toISOString(),
+    items,
+    totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
+    totalCop: items.reduce((sum, item) => sum + item.totalCop, 0),
+  };
+}
+
 function kindToWhere(kind: string): Prisma.OrderWhereInput | undefined {
   if (kind === "incoming") return { status: "CONFIRMED" };
   if (kind === "pickup") return { status: "CONFIRMED", fulfillmentType: "PICKUP" };
@@ -426,4 +482,22 @@ function inferDeliveryZone(address: string) {
     .map((part) => part.trim())
     .filter(Boolean);
   return parts.length > 1 ? parts[parts.length - 1] : "";
+}
+
+function todayInColombia() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function bogotaDayBounds(date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new ApiError(400, "invalid_report_date", "Date must use YYYY-MM-DD format");
+  }
+  const start = new Date(`${date}T05:00:00.000Z`);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
 }

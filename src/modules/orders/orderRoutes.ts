@@ -4,6 +4,7 @@ import { requireAdmin } from "../../middleware/auth.js";
 import { requireInternalApiKey } from "../../middleware/internalApiKey.js";
 import {
   createOrder,
+  getDailyProductReport,
   getOrderById,
   listOrders,
   updateOrderDelivery,
@@ -22,6 +23,16 @@ adminOrderRouter.get("/orders/:kind(incoming|pickup|accepted|rejected|delivered|
   try {
     const orders = await listOrders(req.params.kind);
     res.json({ data: orders.map(toAdminOrder) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminOrderRouter.get("/reports/daily-products", async (req, res, next) => {
+  try {
+    const date = typeof req.query.date === "string" ? req.query.date : undefined;
+    const report = await getDailyProductReport(date);
+    res.json({ data: report });
   } catch (error) {
     next(error);
   }
