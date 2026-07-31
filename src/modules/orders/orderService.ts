@@ -310,11 +310,10 @@ export async function updateOrderDelivery(id: string, input: UpdateDeliveryInput
   if (existing.chatId) {
     try {
       await sendBotMessage({ chatId: existing.chatId, body: messageBody });
-      const pausedUntil = new Date(Date.now() + 30 * 60 * 1000);
       await prisma.conversationControl.upsert({
         where: { chatId: existing.chatId },
-        update: { pausedUntil },
-        create: { chatId: existing.chatId, pausedUntil },
+        update: { aiEnabled: true, pausedUntil: null },
+        create: { chatId: existing.chatId, aiEnabled: true, pausedUntil: null },
       });
       messageDelivered = true;
     } catch (error) {
